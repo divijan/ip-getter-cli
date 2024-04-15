@@ -16,7 +16,6 @@ import IpGetter._
 
 object IpGetterSpec extends ZIOSpecDefault {
   val wireMockServer = new WireMockServer()
-  // test error body
   def spec = suite("IpGetterSpec")(
     suite("tryParseIpSpec")(
       test("tryParseIp correctly parses IP from response") {
@@ -50,16 +49,6 @@ object IpGetterSpec extends ZIOSpecDefault {
             .retry(ExponentialTwice)
         } yield assertTrue(result == "176.100.1.212") 
       }
-      /* ,
-      test("request fails again") {
-        for {
-          client <- ZIO.service[Client]
-          fiber  <- (client.url(URL.decode("http://127.0.0.1").toOption.get).get("/") retry IpGetter.ExponentialTwice).fork
-          _      <- TestClock.adjust(1.second)
-          _      <- TestClock.adjust(1.second)
-          result <- fiber.join.exit
-        } yield assertTrue(result.isFailure)
-      } */
     ).provideShared(Client.default, Scope.default) 
     @@ TestAspect.after(ZIO.succeed(WireMock.reset()))
     @@ TestAspect.beforeAll(ZIO.succeed(wireMockServer.start()))
