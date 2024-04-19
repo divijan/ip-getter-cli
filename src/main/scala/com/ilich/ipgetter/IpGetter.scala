@@ -25,7 +25,7 @@ object IpGetter extends ZIOAppDefault {
     for {
       time   <- currentTime(TimeUnit.SECONDS)
       _      <- Console.printLine(s"attempting request:$time")
-      res    <- client.url(url).get("/")
+      res    <- client.url(url).get("/") //todo: if this fails, retry
       _      <- validateStatus(res.status)
       data   <- res.body.asString
       ip     <- tryParseIp(data) 
@@ -35,7 +35,7 @@ object IpGetter extends ZIOAppDefault {
   def program(urlString: String = "https://api.ipify.org/?format=json") = for {
     client <- ZIO.service[Client]
     ip     <- requestAndParse(client, urlString) retry ExponentialTwice
-    _      <- Console.printLine(ip) // handle errors
+    _      <- Console.printLine(ip) //todo: handle errors
   } yield ()
 
   override val run = program().provide(Client.default, Scope.default)
