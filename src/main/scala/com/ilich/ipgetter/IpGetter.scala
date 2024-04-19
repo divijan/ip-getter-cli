@@ -8,7 +8,7 @@ import zio.Clock.currentTime
 
 object IpGetter extends ZIOAppDefault {
   val NumberPattern: Regex = """\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}""".r
-  val ExponentialTwice = Schedule.recurs(2) && Schedule.exponential(500.millis)
+  val ExponentialTwice = Schedule.recurs(2).tapOutput(o => ZIO.logDebug(s"retrying $o")) && Schedule.exponential(500.millis)
 
   def tryParseIp(body: String): IO[NumberFormatException, String] = {
     lazy val exception = new NumberFormatException(s"Failed to parse IP from response body: $body")
@@ -23,12 +23,10 @@ object IpGetter extends ZIOAppDefault {
   def requestAndParse(client: Client, urlString: String): ZIO[Scope, Throwable, String] = {
     val url = URL.decode(urlString).toOption.get
     for {
-      time   <- currentTime(TimeUnit.SECONDS)
-      _      <- Console.printLine(s"attempting request:$time")
-      res    <- client.url(url).get("/") //todo: if this fails, retry
-      _      <- validateStatus(res.status)
-      data   <- res.body.asString
-      ip     <- tryParseIp(data) 
+      res  <- client.url(url).get("/") //todo: if this fails, retry
+      _    <- validateStatus(res.status)
+      data <- res.body.asString
+      ip   <- tryParseIp(data) 
     } yield ip
   }
 

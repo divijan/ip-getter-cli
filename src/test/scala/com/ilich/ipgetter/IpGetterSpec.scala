@@ -7,8 +7,12 @@ import zio.test._
 import zio.test.Assertion._
 
 import java.io.IOException
+import scala.util.Try
+
 import com.github.tomakehurst.wiremock.client.WireMock
 import com.github.tomakehurst.wiremock.client.WireMock._
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration
+import com.github.tomakehurst.wiremock.common.ConsoleNotifier
 import com.github.tomakehurst.wiremock.WireMockServer
 
 import IpGetter._
@@ -16,12 +20,12 @@ import IpGetter._
 
 object IpGetterSpec extends ZIOSpecDefault {
   val wireMockServer = new WireMockServer()
-  // test error body
+  //todo: test error body
   def spec = suite("IpGetterSpec")(
     suite("tryParseIpSpec")(
       test("tryParseIp correctly parses IP from response") {
         for {
-          ip      <- tryParseIp("""{"ip": "192.168.0.19"}""")
+          ip <- tryParseIp("""{"ip": "192.168.0.19"}""")
         } yield assertTrue(ip == "192.168.0.19")
       },
       test("tryParseIp fails with NumberFormatException if it cannot parse IP") {
@@ -35,18 +39,16 @@ object IpGetterSpec extends ZIOSpecDefault {
 
         for {
           client <- ZIO.service[Client]
-          result  <- requestAndParse(client, "http://127.0.0.1:8080/?format=json")
-            .retry(ExponentialTwice)
-            .orElse(ZIO.attempt(verify(3, getRequestedFor(urlEqualTo("/?format=json"))))).exit
-        } yield assertTrue(result.isSuccess)
-      },
+          result <- requestAndParse(client, "http://127.0.0.1:8080/?format=json").retry(ExponentialTwice).exit
+        } yield assertTrue(result.isFailure && Try(verify(3, getRequestedFor(urlEqualTo("/?format=json")))).isSuccess)
+      } @@ TestAspect.withLiveClock,
       test("request succeeds and ip is printed to the console") {
         stubFor(get("/?format=json")
           .willReturn(ok("""{"ip":"176.100.1.212"}""")))
 
         for {
           client <- ZIO.service[Client]
-          result  <- requestAndParse(client, "http://127.0.0.1:8080/?format=json")
+          result <- requestAndParse(client, "http://127.0.0.1:8080/?format=json")
             .retry(ExponentialTwice)
         } yield assertTrue(result == "176.100.1.212") 
       }
@@ -61,11 +63,10 @@ object IpGetterSpec extends ZIOSpecDefault {
         } yield assertTrue(result.isFailure)
       } */
     ).provideShared(Client.default, Scope.default) 
-    @@ TestAspect.after(ZIO.succeed(WireMock.reset()))
+    @@ TestAspect.sequential
+    //@@ TestAspect.after(ZIO.succeed(WireMock.reset()))
     @@ TestAspect.beforeAll(ZIO.succeed(wireMockServer.start()))
     @@ TestAspect.afterAll(ZIO.succeed(wireMockServer.stop()))
   )
   
-  
-
 }
