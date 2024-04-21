@@ -6,25 +6,26 @@ import scala.util.matching.Regex
 
 object IpGetter extends ZIOAppDefault {
   val NumberPattern: Regex = """\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}""".r
-  val ExponentialTwice = Schedule.recurs(2)
+  val ExponentialTwice = Schedule.recurs(2).tapOutput(o => ZIO.logDebug(s"retrying $o")) && Schedule.exponential(500.millis)
 
   def tryParseIp(body: String): IO[NumberFormatException, String] = {
     lazy val exception = new NumberFormatException(s"Failed to parse IP from response body: $body")
     ZIO.getOrFailWith(exception)(IpGetter.NumberPattern.findFirstIn(body))
   }
 
-  def validateStatus(s: Status) = ZIO.whenCase(s){
+  def validateStatus(res: Response) = ZIO.whenCase(res.status){
     case Status.Ok => ZIO.succeed(())
-    case _         => ZIO.fail(new IllegalStateException(s"HTTP response status is $s"))
+    case s         => res.body.asString.flatMap(body => ZIO.fail(new IllegalStateException(
+      s"Error msg received from API: $body (status: $s)")))
   }
 
   def requestAndParse(client: Client, urlString: String): ZIO[Scope, Throwable, String] = {
     val url = URL.decode(urlString).toOption.get
     for {
-      res    <- client.url(url).get("/")
-      _      <- validateStatus(res.status)
-      data   <- res.body.asString
-      ip     <- tryParseIp(data) 
+      res  <- client.url(url).get("/")
+      _    <- validateStatus(res)
+      data <- res.body.asString
+      ip   <- tryParseIp(data) 
     } yield ip
   }
 
