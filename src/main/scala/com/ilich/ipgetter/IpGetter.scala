@@ -15,16 +15,17 @@ object IpGetter extends ZIOAppDefault {
     ZIO.getOrFailWith(exception)(IpGetter.NumberPattern.findFirstIn(body))
   }
 
-  def validateStatus(s: Status) = ZIO.whenCase(s){
+  def validateStatus(res: Response) = ZIO.whenCase(res.status){
     case Status.Ok => ZIO.succeed(())
-    case _         => ZIO.fail(new IllegalStateException(s"HTTP response status is $s"))
+    case s         => res.body.asString.flatMap(body => ZIO.fail(new IllegalStateException(
+      s"Error msg received from API: $body (status: $s)")))
   }
 
   def requestAndParse(client: Client, urlString: String): ZIO[Scope, Throwable, String] = {
     val url = URL.decode(urlString).toOption.get
     for {
-      res  <- client.url(url).get("/") //todo: if this fails, retry
-      _    <- validateStatus(res.status)
+      res  <- client.url(url).get("/")
+      _    <- validateStatus(res)
       data <- res.body.asString
       ip   <- tryParseIp(data) 
     } yield ip
@@ -33,7 +34,7 @@ object IpGetter extends ZIOAppDefault {
   def program(urlString: String = "https://api.ipify.org/?format=json") = for {
     client <- ZIO.service[Client]
     ip     <- requestAndParse(client, urlString) retry ExponentialTwice
-    _      <- Console.printLine(ip) //todo: handle errors
+    _      <- Console.printLine(ip)
   } yield ()
 
   override val run = program().provide(Client.default, Scope.default)

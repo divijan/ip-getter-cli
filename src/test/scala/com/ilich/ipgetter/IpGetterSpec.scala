@@ -20,7 +20,6 @@ import IpGetter._
 
 object IpGetterSpec extends ZIOSpecDefault {
   val wireMockServer = new WireMockServer()
-  //todo: test error body
   def spec = suite("IpGetterSpec")(
     suite("tryParseIpSpec")(
       test("tryParseIp correctly parses IP from response") {
@@ -33,15 +32,28 @@ object IpGetterSpec extends ZIOSpecDefault {
       }
     ),
     suite("IpGetterRequestSpec")(
-      test("request fails after being retried three times when return status is 500 and the body is parseable") {
+      test("request fails after being retried three times when return status is 500") {
         stubFor(get("/?format=json")
-          .willReturn(aResponse().withStatus(500).withBody("""{"ip":"176.100.1.212"}""")))
+          .willReturn(aResponse().withStatus(500).withBody("""{"error":"fail"}""")))
 
         for {
           client <- ZIO.service[Client]
           result <- requestAndParse(client, "http://127.0.0.1:8080/?format=json").retry(ExponentialTwice).exit
-        } yield assertTrue(result.isFailure && Try(verify(3, getRequestedFor(urlEqualTo("/?format=json")))).isSuccess)
+        } yield assertTrue(Try(verify(3, getRequestedFor(urlEqualTo("/?format=json")))).isSuccess) && 
+        assert(result)(fails(
+          isSubtype[IllegalStateException](
+            hasMessage(
+              Assertion.equalTo("""Error msg received from API: {"error":"fail"} (status: InternalServerError)""")
+            )
+          )
+        ))
       } @@ TestAspect.withLiveClock,
+      test("request fails if connection is impossible") {
+        for {
+          client <- ZIO.service[Client]
+          result <- requestAndParse(client, "http://127.0.0.1:1/nonexistent").exit
+        } yield assertTrue(result.isFailure)
+      },
       test("request succeeds and ip is printed to the console") {
         stubFor(get("/?format=json")
           .willReturn(ok("""{"ip":"176.100.1.212"}""")))
@@ -52,19 +64,8 @@ object IpGetterSpec extends ZIOSpecDefault {
             .retry(ExponentialTwice)
         } yield assertTrue(result == "176.100.1.212") 
       }
-      /* ,
-      test("request fails again") {
-        for {
-          client <- ZIO.service[Client]
-          fiber  <- (client.url(URL.decode("http://127.0.0.1").toOption.get).get("/") retry IpGetter.ExponentialTwice).fork
-          _      <- TestClock.adjust(1.second)
-          _      <- TestClock.adjust(1.second)
-          result <- fiber.join.exit
-        } yield assertTrue(result.isFailure)
-      } */
     ).provideShared(Client.default, Scope.default) 
     @@ TestAspect.sequential
-    //@@ TestAspect.after(ZIO.succeed(WireMock.reset()))
     @@ TestAspect.beforeAll(ZIO.succeed(wireMockServer.start()))
     @@ TestAspect.afterAll(ZIO.succeed(wireMockServer.stop()))
   )
