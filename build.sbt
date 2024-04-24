@@ -16,9 +16,12 @@ libraryDependencies ++= Seq(
   "org.wiremock" %  "wiremock"          % "3.5.2"    % Test
 )
 
-ThisBuild / assemblyMergeStrategy := {
+assemblyMergeStrategy := {
   case PathList("META-INF","io.netty.versions.properties") =>  MergeStrategy.discard
   case x   =>
     val oldStrategy = (ThisBuild / assemblyMergeStrategy).value
     oldStrategy(x)
 }
+
+//assemblyOutputPath := new File("artifact/ip-getter-cli-assembly.jar")
+assemblyJarName := "../../artifacts/ip-getter-cli-assembly.jar"

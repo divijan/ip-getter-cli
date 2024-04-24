@@ -4,7 +4,7 @@ import zio._
 import zio.http._
 import scala.util.matching.Regex
 
-object IpGetter extends ZIOAppDefault {
+object IpGetter extends App {
   val NumberPattern: Regex = """\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}""".r
   val ExponentialTwice = Schedule.recurs(2).tapOutput(o => ZIO.logDebug(s"retrying $o")) && Schedule.exponential(500.millis)
 
@@ -35,6 +35,16 @@ object IpGetter extends ZIOAppDefault {
     _      <- Console.printLine(ip)
   } yield ()
 
-  override val run = program().provide(Client.default, Scope.default)
+  val runtime = Runtime.default
+
+  try {
+    Unsafe.unsafe { implicit unsafe =>
+      runtime.unsafe.run(program().provide(Client.default, Scope.default)).getOrThrowFiberFailure()
+    }
+  } catch {
+    case e: Throwable => 
+      scala.Console.err.println(e.getMessage())
+      sys.exit(1)
+  }
 
 }
